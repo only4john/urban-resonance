@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>城市共振：时空噪声色谱</title>
+  <title>城市共振：时空噪声色谱 V2</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { overflow: hidden; background: #0a0a0f; font-family: 'Noto Serif SC', serif; }
@@ -22,7 +22,7 @@
       z-index: 100;
     }
     
-    #playBtn, #testBtn, #testDateBtn {
+    #playBtn, #testBtn {
       background: rgba(30, 30, 40, 0.9);
       border: 1px solid rgba(200, 180, 160, 0.3);
       color: #e8e0d8;
@@ -34,7 +34,7 @@
       transition: all 0.3s;
     }
     
-    #playBtn:hover, #testBtn:hover, #testDateBtn:hover {
+    #playBtn:hover, #testBtn:hover {
       background: rgba(50, 45, 40, 0.95);
       border-color: rgba(200, 180, 160, 0.6);
     }
@@ -43,7 +43,38 @@
     #timelineProgress { height: 100%; background: linear-gradient(90deg, #4a6b8a, #8b6b5a); border-radius: 2px; width: 0%; transition: width 0.1s linear; }
     #timeDisplay { color: rgba(200, 180, 160, 0.8); font-size: 14px; min-width: 160px; text-align: center; }
     
+    #dayNightIcon {
+      width: 28px;
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      animation: floatArc 8s ease-in-out infinite;
+      filter: drop-shadow(0 0 4px rgba(255, 200, 100, 0.5));
+    }
+    
+    @keyframes floatArc {
+      0% { transform: translateY(4px) rotate(-8deg); }
+      25% { transform: translateY(0) rotate(-4deg); }
+      50% { transform: translateY(-4px) rotate(0deg); }
+      75% { transform: translateY(0) rotate(4deg); }
+      100% { transform: translateY(4px) rotate(8deg); }
+    }
+    
+    #dayNightIcon.moon {
+      filter: drop-shadow(0 0 4px rgba(200, 220, 255, 0.5));
+    }
+    
+    .time-container {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
     #info { position: absolute; top: 20px; left: 20px; color: rgba(200, 180, 160, 0.7); font-size: 13px; line-height: 1.8; z-index: 100; }
+    #zoomInfo { font-size: 11px; opacity: 0.6; }
+    #patternCount { font-size: 11px; opacity: 0.6; }
     
     #legend {
       position: absolute;
@@ -72,15 +103,16 @@
   <div id="p5canvas"></div>
   
   <div id="info">
-    <div>城市共振 · 时空噪声色谱</div>
-    <div style="font-size:11px;opacity:0.6;margin-top:4px;">Urban Resonance</div>
+    <div>城市共振 · 时空噪声色谱 V2</div>
+    <div id="zoomInfo">缩放: 11</div>
+    <div id="patternCount">固定花纹: 0</div>
   </div>
   
   <div id="controls">
     <button id="playBtn">▶ 播放</button>
     <button id="testBtn">🔍 测试</button>
     <div id="timeline"><div id="timelineProgress"></div></div>
-    <div id="timeDisplay">2022-01-01</div>
+    <div id="timeDisplay"><span id="dayNightIcon">☀️</span><span>2022年1月1日</span></div>
   </div>
   
   <div id="legend">
@@ -89,40 +121,200 @@
   
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
   <script>
-    // 18类矿物色谱 + 物理参数 (高饱和度亮色)
-    // name: 名称, r/g/b: 颜色, baseRadius: 扩散半径, lineWidth: 线条粗细, waveMode: 波动模式(频率)
+    // 18类矿物色谱 - waveMode对应噪音频率（低频=少花瓣粗线，高频=多花瓣细线）
+    // 粗线: 渣土车、工地施工、夜间施工、垃圾问题、夜间扰民 (waveMode: 2)
+    // 细线: 底商餐饮、其他、综合噪音、公园噪音 (waveMode: 6)
+    // 中等线: 其他类型 (waveMode: 3-5)
     const MINERAL_COLORS = [
-      { name: '工地施工', r: 60, g: 140, b: 140, baseRadius: 18, lineWidth: 1.5, waveMode: 2 },    // 青绿
-      { name: '道路出行', r: 140, g: 150, b: 170, baseRadius: 12, lineWidth: 1, waveMode: 3 },   // 灰蓝
-      { name: '小区管理', r: 100, g: 110, b: 120, baseRadius: 10, lineWidth: 1, waveMode: 4 },   // 蓝灰
-      { name: '商业噪音', r: 220, g: 100, b: 100, baseRadius: 14, lineWidth: 1.2, waveMode: 5 },  // 亮红
-      { name: '公共设施', r: 150, g: 120, b: 180, baseRadius: 12, lineWidth: 1, waveMode: 4 },    // 紫
-      { name: '交通噪音', r: 120, g: 130, b: 160, baseRadius: 14, lineWidth: 1.2, waveMode: 3 }, // 蓝
-      { name: '夜间施工', r: 210, g: 80, b: 80, baseRadius: 20, lineWidth: 2, waveMode: 2 },       // 深红
-      { name: '设备噪音', r: 80, g: 160, b: 170, baseRadius: 15, lineWidth: 1.3, waveMode: 3 },  // 青蓝
-      { name: '广场活动', r: 240, g: 130, b: 130, baseRadius: 16, lineWidth: 1.5, waveMode: 6 },  // 粉红
-      { name: '渣土车', r: 170, g: 170, b: 180, baseRadius: 18, lineWidth: 2.5, waveMode: 2 },    // 浅灰
-      { name: '高架铁路', r: 120, g: 100, b: 160, baseRadius: 16, lineWidth: 1.8, waveMode: 2 },  // 紫蓝
-      { name: '夜间扰民', r: 220, g: 150, b: 100, baseRadius: 15, lineWidth: 1.5, waveMode: 3 }, // 橙
-      { name: '底商餐饮', r: 200, g: 140, b: 80, baseRadius: 12, lineWidth: 1, waveMode: 5 },    // 橙黄
-      { name: '道路施工', r: 60, g: 150, b: 120, baseRadius: 14, lineWidth: 1.3, waveMode: 3 },  // 青绿
-      { name: '综合噪音', r: 180, g: 120, b: 70, baseRadius: 12, lineWidth: 1, waveMode: 4 },    // 棕橙
-      { name: '公园噪音', r: 160, g: 140, b: 180, baseRadius: 14, lineWidth: 1.2, waveMode: 5 },// 淡紫
-      { name: '垃圾问题', r: 220, g: 160, b: 100, baseRadius: 12, lineWidth: 2, waveMode: 3 },  // 土黄
-      { name: '其他', r: 140, g: 140, b: 140, baseRadius: 10, lineWidth: 1, waveMode: 4 }         // 中灰
+      { name: '工地施工', r: 60, g: 140, b: 140, waveMode: 2, baseRadius: 0.014 }, // 粗线
+      { name: '道路出行', r: 140, g: 150, b: 170, waveMode: 3, baseRadius: 0.01 }, // 中等线
+      { name: '小区管理', r: 100, g: 110, b: 120, waveMode: 4, baseRadius: 0.008 }, // 中等线
+      { name: '商业噪音', r: 220, g: 100, b: 100, waveMode: 5, baseRadius: 0.01 }, // 中等线
+      { name: '公共设施', r: 150, g: 120, b: 180, waveMode: 4, baseRadius: 0.008 }, // 中等线
+      { name: '交通噪音', r: 120, g: 130, b: 160, waveMode: 3, baseRadius: 0.012 }, // 中等线
+      { name: '夜间施工', r: 210, g: 80, b: 80, waveMode: 2, baseRadius: 0.015 }, // 粗线
+      { name: '设备噪音', r: 80, g: 160, b: 170, waveMode: 3, baseRadius: 0.012 }, // 中等线
+      { name: '广场活动', r: 240, g: 130, b: 130, waveMode: 5, baseRadius: 0.01 }, // 中等线
+      { name: '渣土车', r: 170, g: 170, b: 180, waveMode: 2, baseRadius: 0.015 }, // 粗线
+      { name: '高架铁路', r: 120, g: 100, b: 160, waveMode: 3, baseRadius: 0.014 }, // 中等线
+      { name: '夜间扰民', r: 220, g: 150, b: 100, waveMode: 2, baseRadius: 0.008 }, // 粗线
+      { name: '底商餐饮', r: 200, g: 140, b: 80, waveMode: 6, baseRadius: 0.008 }, // 细线
+      { name: '道路施工', r: 60, g: 150, b: 120, waveMode: 3, baseRadius: 0.013 }, // 中等线
+      { name: '综合噪音', r: 180, g: 120, b: 70, waveMode: 6, baseRadius: 0.01 }, // 细线
+      { name: '公园噪音', r: 160, g: 140, b: 180, waveMode: 6, baseRadius: 0.008 }, // 细线
+      { name: '垃圾问题', r: 220, g: 160, b: 100, waveMode: 2, baseRadius: 0.008 }, // 粗线
+      { name: '其他', r: 140, g: 140, b: 140, waveMode: 6, baseRadius: 0.01 } // 细线
     ];
+    
+    function getColorData(categoryId) {
+      if (categoryId < 0 || categoryId >= MINERAL_COLORS.length) {
+        return MINERAL_COLORS[17];
+      }
+      return MINERAL_COLORS[categoryId];
+    }
     
     const CONFIG = {
       mapboxToken: 'YOUR_MAPBOX_TOKEN',
       center: [114.3055, 30.5928],
-      zoom: 11,
-      startDate: new Date('2022-01-01'),
-      endDate: new Date('2024-12-31')
+      zoom: 11
     };
     
     let map, noiseData = [], currentDate = new Date('2022-01-01'), isPlaying = false;
-    let pulses = [], pInstance;
-    let legendLoaded = false;
+    let chladniPatterns = []; // 克拉尼花纹列表
+    let pInstance;
+    let currentZoom = 11;
+    
+    // 最大数量限制
+    const MAX_FIXED_PATTERNS = 1000;
+    const MAX_ACTIVE_PATTERNS = 200;
+    
+    // 克拉尼花纹类
+    class ChladniPattern {
+      constructor(p, lon, lat, categoryId, timestamp) {
+        this.p = p;
+        this.lon = lon;
+        this.lat = lat;
+        this.categoryId = Math.max(0, Math.min(categoryId, MINERAL_COLORS.length - 1));
+        this.timestamp = timestamp;
+        this.phase = p.random(p.TWO_PI);
+        this.waveMode = getColorData(this.categoryId).waveMode || 3;
+        this.baseRadius = getColorData(this.categoryId).baseRadius || 0.01;
+        
+        this.age = 0;
+        this.maxAge = 60 * 2; // 加速消失：2秒后固定（原为4秒）
+        this.phaseState = 'growing';
+        this.intensity = 0;
+        this.maxIntensity = 1.0;
+        this.fixed = false;
+        this.patternLayers = [];
+      }
+      
+      update() {
+        this.age++;
+        
+        if (!this.fixed) {
+          if (this.age < 60) {
+            this.phaseState = 'growing';
+            this.intensity = Math.min(this.maxIntensity, this.age / 60);
+          } else if (this.age < this.maxAge) {
+            this.phaseState = 'fading';
+            const fadeProgress = (this.age - 60) / (this.maxAge - 60);
+            this.intensity = this.maxIntensity * (1 - fadeProgress * 0.7);
+            
+            // 每隔20帧保存一个波纹印记（5%, 10%, 15%）
+            if (this.age % 20 === 0 && this.patternLayers.length < 3) {
+              this.patternLayers.push({
+                phase: this.phase,
+                mode: this.waveMode,
+                intensity: this.intensity * 0.8,
+                radiusScale: 0.05 + this.patternLayers.length * 0.05 // 5%, 10%, 15%
+              });
+            }
+          } else {
+            this.fixed = true;
+            this.intensity = this.intensity * 0.5;
+          }
+        }
+      }
+      
+      interfere(otherPattern, overlapFactor) {
+        // 干涉效果永久保留
+        const interferenceLayer = {
+          phase: this.p.random(this.p.TWO_PI),
+          mode: otherPattern.waveMode,
+          intensity: this.fixed ? otherPattern.intensity * overlapFactor * 0.5 : otherPattern.intensity * overlapFactor * 0.3,
+          radiusScale: 0.15
+        };
+        
+        this.patternLayers.push(interferenceLayer);
+        
+        // 限制总层数
+        if (this.patternLayers.length > 6) {
+          this.patternLayers.shift();
+        }
+      }
+      
+      // 获取当前波纹半径（米）
+      getCurrentWaveRadius() {
+        if (this.fixed) return 0;
+        const radiusInDegrees = this.baseRadius * (0.5 + this.age * 0.01) * 1.5;
+        return radiusInDegrees * 111000 * Math.cos(this.lat * Math.PI / 180);
+      }
+      
+      draw(p) {
+        const point = map.project([this.lon, this.lat]);
+        const screenX = point.x;
+        const screenY = point.y;
+        
+        const point1 = map.project([this.lon, this.lat]);
+        const point2 = map.project([this.lon + this.baseRadius, this.lat]);
+        const baseRadius = Math.abs(point2.x - point1.x);
+        
+        const c = getColorData(this.categoryId);
+        
+        // 根据waveMode计算线宽：waveMode小=粗线，waveMode大=细线
+        // waveMode: 2(粗) -> strokeWeight: 2.5
+        // waveMode: 3-5(中) -> strokeWeight: 1.5
+        // waveMode: 6(细) -> strokeWeight: 0.8
+        const baseStrokeWeight = 3.2 - this.waveMode * 0.4;
+        
+        p.push();
+        p.translate(screenX, screenY);
+        
+        // 绘制当前活动的波纹 - 多层效果
+        if (!this.fixed) {
+          const currentRadius = baseRadius * (0.5 + this.age * 0.01);
+          const waveAmp = currentRadius * 0.3 * this.intensity;
+          
+          for (let i = 0; i < 3; i++) {
+            const waveR = currentRadius * (0.3 + i * 0.2);
+            const waveAmp2 = waveAmp * (1 - i * 0.2);
+            
+            p.stroke(c.r, c.g, c.b, this.intensity * 200);
+            p.strokeWeight(baseStrokeWeight - i * 0.3);
+            p.noFill();
+            
+            p.beginShape();
+            for (let a = 0; a < p.TWO_PI; a += 0.1) {
+              const disp = Math.sin(a * (this.waveMode + i) + this.phase) * waveAmp2;
+              const px = Math.cos(a) * (waveR + disp);
+              const py = Math.sin(a) * (waveR + disp);
+              p.vertex(px, py);
+            }
+            p.endShape(p.CLOSE);
+          }
+        }
+        
+        // 绘制固定层 - 多层效果
+        for (let layer of this.patternLayers) {
+          const radiusScale = layer.radiusScale || (0.3 + this.patternLayers.indexOf(layer) * 0.15);
+          const layerRadius = baseRadius * radiusScale;
+          const layerAmp = layerRadius * 0.3 * layer.intensity;
+          
+          // 固定层的线宽也根据waveMode调整
+          const layerStrokeWeight = 2.5 - layer.mode * 0.3;
+          
+          p.stroke(c.r, c.g, c.b, layer.intensity * 255);
+          p.strokeWeight(layerStrokeWeight);
+          p.noFill();
+          
+          p.beginShape();
+          for (let a = 0; a < p.TWO_PI; a += 0.15) {
+            const disp = Math.sin(a * layer.mode + layer.phase) * layerAmp;
+            const px = Math.cos(a) * (layerRadius + disp);
+            const py = Math.sin(a) * (layerRadius + disp);
+            p.vertex(px, py);
+          }
+          p.endShape(p.CLOSE);
+        }
+        
+        p.fill(c.r, c.g, c.b, this.intensity * 255);
+        p.noStroke();
+        p.ellipse(0, 0, 4, 4);
+        
+        p.pop();
+      }
+    }
     
     function initMap() {
       mapboxgl.accessToken = CONFIG.mapboxToken;
@@ -141,97 +333,13 @@
         minZoom: 9,
         attributionControl: false
       });
+      
+      map.on('zoom', () => {
+        currentZoom = map.getZoom();
+        document.getElementById('zoomInfo').textContent = `缩放: ${currentZoom.toFixed(1)}`;
+      });
+      
       map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right');
-    }
-    
-    function lonLatToPixel(lon, lat) {
-      const point = map.project([lon, lat]);
-      return { x: point.x, y: point.y };
-    }
-    
-    class Pulse {
-      constructor(p, x, y, categoryId, weight, timestamp, isNightTime) {
-        this.p = p;
-        this.x = x; this.y = y;
-        this.categoryId = categoryId;
-        this.weight = weight;
-        this.timestamp = timestamp;
-        this.isNightTime = isNightTime;
-        
-        const colorData = MINERAL_COLORS[categoryId] || MINERAL_COLORS[17];
-        this.baseColor = p.color(colorData.r, colorData.g, colorData.b, 200);
-        
-        // 夜间扩散范围更大
-        const nightBoost = isNightTime ? 1.5 : 1.0;
-        const baseR = colorData.baseRadius || 12;
-        this.maxRadius = baseR * nightBoost * (weight / 2);
-        
-        // 线条粗细与噪音类型相关
-        this.lineWidth = colorData.lineWidth || 1;
-        
-        // 波动模式（频率）
-        this.waveMode = colorData.waveMode || 3;
-        
-        this.radius = 0;
-        this.phase = p.random(p.TWO_PI);
-        this.dampingPhase = 0;
-        this.active = true;
-        this.opacity = 1.0;
-        // 低频波(waveMode小)波纹少，高频波波纹多
-        this.waveCount = Math.floor(3 + this.waveMode * 1.2);
-        this.wavePhase = p.random(1000);
-      }
-      
-      update() {
-        if (!this.active) return;
-        // 低频波扩散慢，高频波扩散快
-        const freqSpeed = 0.05 + (6 - this.waveMode) * 0.015;
-        if (this.radius < this.maxRadius) this.radius += (this.maxRadius - this.radius) * freqSpeed;
-        this.dampingPhase += 0.11;
-        this.opacity = Math.exp(-this.dampingPhase * 0.15);
-        this.wavePhase += 0.05;
-        if (this.opacity < 0.02) this.active = false;
-      }
-      
-      draw(p) {
-        if (!this.active || this.opacity < 0.01) return;
-        const c = this.baseColor;
-        const redC = p.red(c), greenC = p.green(c), blueC = p.blue(c);
-        p.push();
-        p.translate(this.x, this.y);
-        for (let i = 0; i < this.waveCount; i++) {
-          const waveR = this.radius * (0.3 + i * 0.15);
-          // 低频波振幅大，高频波振幅小
-          const waveAmp = Math.sin(this.wavePhase * (this.waveMode / 3) + i) * (12 / this.waveMode) * this.opacity;
-          const glowAlpha = this.opacity * 80;
-          for (let g = 3; g > 0; g--) {
-            p.stroke(redC, greenC, blueC, glowAlpha / g);
-            p.strokeWeight(this.lineWidth * (1 + g * 0.5));
-            p.noFill();
-            this.drawChladniWave(p, waveR + waveAmp * (g * 0.3), i);
-          }
-          p.stroke(redC, greenC, blueC, this.opacity * 200);
-          p.strokeWeight(this.lineWidth);
-          this.drawChladniWave(p, waveR + waveAmp, i);
-        }
-        p.fill(redC, greenC, blueC, this.opacity * 255);
-        p.noStroke();
-        p.ellipse(0, 0, this.lineWidth * 2, this.lineWidth * 2);
-        p.pop();
-      }
-      
-      drawChladniWave(p, r, mode) {
-        p.beginShape();
-        // 使用waveMode作为频率参数
-        const freq = this.waveMode;
-        for (let a = 0; a < p.TWO_PI; a += 0.08) {
-          const displacement = Math.sin(a * (mode + freq) * 1.5 + this.phase) * Math.cos(a * (mode + freq * 0.5) + this.phase * 0.7);
-          const px = Math.cos(a) * (r + displacement * (8 / freq));
-          const py = Math.sin(a) * (r + displacement * (8 / freq));
-          p.vertex(px, py);
-        }
-        p.endShape(p.CLOSE);
-      }
     }
     
     document.addEventListener('DOMContentLoaded', () => {
@@ -249,13 +357,60 @@
         };
         p.draw = function() {
           p.clear();
-          for (let i = pulses.length - 1; i >= 0; i--) {
-            pulses[i].update();
-            pulses[i].draw(p);
-            if (!pulses[i].active) pulses.splice(i, 1);
+          
+          // 更新所有花纹
+          for (let pattern of chladniPatterns) {
+            pattern.update();
           }
-          if (pulses.length > 500) pulses.splice(0, pulses.length - 500);
-          if (isPlaying && p.frameCount % 60 === 0) updateTimeline();
+          
+          // 干涉检测：只有活跃花纹之间才能互相干涉
+          // 基于波纹扩张半径来判断是否相交
+          for (let i = 0; i < chladniPatterns.length; i++) {
+            for (let j = i + 1; j < chladniPatterns.length; j++) {
+              const a = chladniPatterns[i];
+              const b = chladniPatterns[j];
+              
+              // 计算两个投诉点之间的距离（米）
+              const dx = (a.lon - b.lon) * 111000 * Math.cos(a.lat * Math.PI / 180);
+              const dy = (a.lat - b.lat) * 111000;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              
+              // 获取两个花纹当前的波纹半径
+              const radiusA = a.getCurrentWaveRadius();
+              const radiusB = b.getCurrentWaveRadius();
+              
+              // 如果两个波纹圆相交（圆心距离小于半径之和），产生干涉
+              if (radiusA > 0 && radiusB > 0 && dist < radiusA + radiusB) {
+                const overlap = 1 - dist / (radiusA + radiusB);
+                // 只有活跃花纹产生干涉效果，固定花纹不主动干涉
+                if (!a.fixed) {
+                  a.interfere(b, overlap);
+                }
+                if (!b.fixed) {
+                  b.interfere(a, overlap);
+                }
+              }
+            }
+          }
+          
+          // 绘制所有花纹
+          for (let pattern of chladniPatterns) {
+            pattern.draw(p);
+          }
+          
+          // 限制固定花纹数量
+          const fixedCount = chladniPatterns.filter(p => p.fixed).length;
+          if (fixedCount > MAX_FIXED_PATTERNS) {
+            // 移除最老的固定花纹
+            const fixed = chladniPatterns.filter(p => p.fixed);
+            const toRemove = fixed.slice(0, fixedCount - MAX_FIXED_PATTERNS);
+            chladniPatterns = chladniPatterns.filter(p => !toRemove.includes(p));
+          }
+          
+          document.getElementById('patternCount').textContent = `固定花纹: ${chladniPatterns.filter(p => p.fixed).length}`;
+          
+          // 每15帧前进1小时，360帧走完24小时（约6秒一天）
+          if (isPlaying && p.frameCount % 15 === 0) updateTimeline();
         };
       }, 'p5canvas');
     });
@@ -266,17 +421,13 @@
         const data = await response.json();
         noiseData = data.map(d => ({
           ...d,
-          timestamp: d.timestamp * 1000, // JSON中是秒，转为毫秒
+          timestamp: d.timestamp * 1000,
           triggered: false
         }));
-        // 按时间正序排列（从旧到新）
         noiseData.sort((a, b) => a.timestamp - b.timestamp);
         if (noiseData.length > 0) {
-          CONFIG.startDate = new Date(noiseData[0].timestamp);
-          CONFIG.endDate = new Date(noiseData[noiseData.length - 1].timestamp);
-          currentDate = new Date(CONFIG.startDate);
-          console.log(`数据范围: ${CONFIG.startDate.toISOString()} 到 ${CONFIG.endDate.toISOString()}`);
-          console.log(`数据条数: ${noiseData.length}`);
+          currentSimTime = 0;
+          console.log(`数据: ${noiseData.length}条`);
         }
       } catch (e) {
         console.warn('使用演示数据');
@@ -285,16 +436,21 @@
     }
     
     function generateDemoData() {
-      for (let i = 0; i < 500; i++) {
+      // 从2022年1月1日开始生成数据
+      const startDate = new Date('2022-01-01').getTime();
+      const dayMs = 24 * 60 * 60 * 1000;
+      
+      for (let i = 0; i < 200; i++) {
         noiseData.push({
           lon: CONFIG.center[0] + (Math.random() - 0.5) * 0.3,
           lat: CONFIG.center[1] + (Math.random() - 0.5) * 0.24,
           category_id: Math.floor(Math.random() * 18),
-          timestamp: CONFIG.startDate.getTime() + Math.random() * (CONFIG.endDate - CONFIG.startDate),
-          weight: 1 + Math.random() * 2,
+          timestamp: startDate + Math.random() * dayMs * 30,
           triggered: false
         });
       }
+      noiseData.sort((a, b) => a.timestamp - b.timestamp);
+      currentSimTime = 0;
     }
     
     function buildLegend() {
@@ -302,66 +458,102 @@
       MINERAL_COLORS.forEach((c, i) => {
         const item = document.createElement('div');
         item.className = 'legend-item';
-        const rgb = `rgb(${c.r}, ${c.g}, ${c.b})`;
-        item.innerHTML = `<div class="legend-color" style="background:${rgb}"></div>${c.name}`;
+        item.innerHTML = `<div class="legend-color" style="background:rgb(${c.r},${c.g},${c.b})"></div>${c.name}`;
         legend.appendChild(item);
       });
     }
     
-    let lastUpdateDate = null, dataPointer = 0;
+    let currentSimTime = 0; // 当前模拟时间（毫秒）
+    let dataPointer = 0;
     
     function updateTimeline() {
       const dayMs = 24 * 60 * 60 * 1000;
-      const todayStr = currentDate.toISOString().split('T')[0];
-      if (lastUpdateDate !== todayStr) {
-        lastUpdateDate = todayStr;
-        triggerPulsesForDay(currentDate.getTime(), currentDate.getTime() + dayMs);
-      }
-      currentDate = new Date(currentDate.getTime() + dayMs);
-      if (currentDate >= CONFIG.endDate) {
-        currentDate = CONFIG.endDate;
-        isPlaying = false;
-        document.getElementById('playBtn').textContent = '▶ 重播';
-      }
-      const progress = (currentDate - CONFIG.startDate) / (CONFIG.endDate - CONFIG.startDate);
-      document.getElementById('timelineProgress').style.width = (progress * 100) + '%';
-      document.getElementById('timeDisplay').textContent = todayStr;
-    }
-    
-    function triggerPulsesForDay(dayStart, dayEnd) {
-      while (dataPointer < noiseData.length && noiseData[dataPointer].timestamp < dayEnd) {
+      const hoursToAdd = 2; // 每次前进2小时
+      const hourMs = 60 * 60 * 1000;
+      
+      // 更新模拟时间
+      currentSimTime += hoursToAdd * hourMs;
+      
+      // 触发在当前模拟时间之前的所有未触发事件
+      while (dataPointer < noiseData.length && noiseData[dataPointer].timestamp <= noiseData[0].timestamp + currentSimTime) {
         const data = noiseData[dataPointer];
-        if (data.timestamp >= dayStart && !data.triggered) {
+        if (!data.triggered) {
           data.triggered = true;
-          const pixel = lonLatToPixel(data.lon, data.lat);
-          if (pixel && !isNaN(pixel.x) && !isNaN(pixel.y) && pInstance) {
-            // 判断是否为夜间(22:00-次日6:00)
-            const hour = new Date(data.timestamp).getHours();
-            const isNightTime = hour >= 22 || hour < 6;
-            pulses.push(new Pulse(pInstance, pixel.x, pixel.y, data.category_id, data.weight, data.timestamp, isNightTime));
+          
+          if (pInstance) {
+            const pattern = new ChladniPattern(
+              pInstance,
+              data.lon,
+              data.lat,
+              data.category_id,
+              data.timestamp
+            );
+            chladniPatterns.push(pattern);
           }
         }
         dataPointer++;
       }
+      
+      const totalDays = Math.ceil((noiseData[noiseData.length-1].timestamp - noiseData[0].timestamp) / dayMs);
+      const currentDay = Math.floor(currentSimTime / dayMs);
+      const progress = Math.min(1, currentSimTime / (noiseData[noiseData.length-1].timestamp - noiseData[0].timestamp));
+      document.getElementById('timelineProgress').style.width = (progress * 100) + '%';
+      
+      // 计算当前模拟的实际日期和时间
+      const currentTimestamp = noiseData[0].timestamp + currentSimTime;
+      const currentDate = new Date(currentTimestamp);
+      const hours = currentDate.getHours();
+      
+      // 格式化日期显示（包含年）
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth() + 1;
+      const day = currentDate.getDate();
+      const dateStr = `${year}年${month}月${day}日`;
+      
+      // 判断白天还是晚上（6:00-18:00为白天）
+      const isDay = hours >= 6 && hours < 18;
+      const dayNightIcon = isDay ? '☀️' : '🌙';
+      const iconClass = isDay ? '' : 'moon';
+      
+      document.getElementById('timeDisplay').innerHTML = `<span id="dayNightIcon" class="${iconClass}">${dayNightIcon}</span><span>${dateStr}</span>`;
     }
     
     document.getElementById('playBtn').addEventListener('click', () => {
-      if (currentDate >= CONFIG.endDate) {
-        currentDate = new Date(CONFIG.startDate);
-        noiseData.forEach(d => d.triggered = false);
-        pulses = [];
-        dataPointer = 0;
-      }
+      // 重置
+      noiseData.forEach(d => d.triggered = false);
+      chladniPatterns = [];
+      dataPointer = 0;
+      currentSimTime = 0;
+      document.getElementById('timelineProgress').style.width = '0%';
       isPlaying = !isPlaying;
       document.getElementById('playBtn').textContent = isPlaying ? '⏸ 暂停' : '▶ 播放';
     });
     
     document.getElementById('testBtn').addEventListener('click', () => {
+      // 重置
+      noiseData.forEach(d => d.triggered = false);
+      chladniPatterns = [];
+      dataPointer = 0;
+      currentSimTime = 0;
       isPlaying = false;
       document.getElementById('playBtn').textContent = '▶ 播放';
-      pulses = [];
+      document.getElementById('timelineProgress').style.width = '0%';
+      
+      // 手动触发第一天数据
       const dayMs = 24 * 60 * 60 * 1000;
-      triggerPulsesForDay(CONFIG.startDate.getTime(), CONFIG.startDate.getTime() + dayMs);
+      const dayStart = noiseData[0].timestamp;
+      const dayEnd = dayStart + dayMs;
+      while (dataPointer < noiseData.length && noiseData[dataPointer].timestamp < dayEnd) {
+        const data = noiseData[dataPointer];
+        if (!data.triggered) {
+          data.triggered = true;
+          if (pInstance) {
+            const pattern = new ChladniPattern(pInstance, data.lon, data.lat, data.category_id, data.timestamp);
+            chladniPatterns.push(pattern);
+          }
+        }
+        dataPointer++;
+      }
     });
   </script>
 </body>
